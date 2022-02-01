@@ -20,3 +20,7 @@ happy <- happy[-1,]
 
 test <- merge(industry, happy,by="City",all = FALSE)
 merged <-  select(test, -2:-3,-5,-7,-8,-10:-13,-15,-17,-18:-24,-27:-28,-31:-32,-35,-36:-45,-47:-50)
+
+# test
+
+head(merged)
