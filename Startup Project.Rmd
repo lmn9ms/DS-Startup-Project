@@ -1,0 +1,468 @@
+---
+title: "Startup Project"
+author: "Chloe Dearman"
+date: "2/8/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Loading in Data
+
+## Libraries
+
+```{r,message=FALSE}
+library(dplyr)
+library(tidyverse)
+library(readxl)
+library(sqldf)
+library(ggplot2)
+```
+
+
+## Files
+
+
+```{r,message=FALSE}
+metrics <- read.csv("Startup Metrics by City", header = TRUE)
+company_info <- read.csv("7ba47fc0-0006-45d7-a975-4cefcc68f070_SECFormDFiling-2018.csv")
+city_econ <- read_xlsx("city_info.xlsx")
+colnames(city_econ) <- city_econ[1,]
+city_econ <- city_econ[-1,]
+
+colnames(city_econ)[1] <- "Country"
+colnames(city_econ)[2] <- "City"
+```
+
+
+
+# Exploratory Data Analysis
+
+## EDA for Only US
+
+```{r}
+only_US <- sqldf("SELECT * 
+                 FROM company_info
+                 WHERE primary_issuer_state_or_country IN ('AL','AK','AS','AZ','AR','CA','CO','CT','DE','DC','FM','FL','GA',
+                                                          'GU','HI','ID','IL','IN','IA','KS','KY','LA','ME','MH','MD','MA',
+                                                          'MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND',
+                                                          'MP','OH','OK','OR','PW','PA','PR','RI','SC','SD','TN','TX','UT',
+                                                          'VT','VI','VA','WA','WV','WI','WY')")
+
+only_US$primary_issuer_city <- str_to_title(only_US$primary_issuer_city)
+
+```
+
+### Investors
+
+```{r}
+investors <- only_US %>%
+  group_by(primary_issuer_state_or_country) %>%
+  summarize(mean_num_investors = mean(total_investors))
+ordered_investors <- investors[order(investors$mean_num_investors,decreasing = T),]
+investors_chart <- ggplot(ordered_investors[1:15,], aes(x = reorder(primary_issuer_state_or_country, -mean_num_investors), y=mean_num_investors)) + geom_bar(stat="identity") + theme(axis.text.x = element_text(angle = 45)) + labs(x="State/Country", y="Mean Number of Investors", title = "Number of Investors per City/Cuontry")
+investors_chart
+```
+
+### State Frequency
+
+```{r}
+state_frequency <- only_US %>%
+  group_by(primary_issuer_state_or_country) %>%
+  summarize(state_count = n())
+ordered_state_frequency <- state_frequency[order(state_frequency$state_count,decreasing = T),]
+state_frequency_chart <- ggplot(ordered_state_frequency[1:15,], aes(x = reorder(primary_issuer_state_or_country, -state_count), y=state_count)) + geom_bar(stat="identity") + theme(axis.text.x = element_text(angle = 45)) + labs(x="State", y="Frequency of State", title = "Frequeny of States")
+state_frequency_chart
+```
+
+### City Frequency
+
+```{r}
+city_frequency <- only_US %>%
+  group_by(primary_issuer_city) %>%
+  summarize(city_count = n())
+ordered_city_frequency <- city_frequency[order(city_frequency$city_count,decreasing = T),]
+city_frequency_chart <- ggplot(ordered_city_frequency[1:15,], aes(x = reorder(primary_issuer_city, -city_count), y=city_count)) + geom_bar(stat="identity") + theme(axis.text.x = element_text(angle = 45)) + labs(x="City", y="Frequency of City", title = "Frequeny of City")
+city_frequency_chart
+```
+
+### Industry Frequency
+
+```{r}
+industry_frequency <- only_US %>%
+  group_by(industry_group_type) %>%
+  summarize(industry_count = n())
+ordered_industry_frequency <- industry_frequency[order(industry_frequency$industry_count,decreasing = T),]
+
+industry_frequency_chart <- ggplot(ordered_industry_frequency[1:15,], aes(x = reorder(industry_group_type, -industry_count), y=industry_count)) + geom_bar(stat="identity") + theme(axis.text.x = element_text(angle = 45)) + labs(x="Industry", y="Frequency of Industry", title = "Frequeny of Industry")
+industry_frequency_chart
+```
+
+### Company Type Frequency
+
+```{r}
+company_type_frequency <- only_US %>%
+  group_by(primary_issuer_entity_type) %>%
+  summarize(company_type_count = n())
+ordered_company_type_frequency <- company_type_frequency[order(company_type_frequency$company_type_count,decreasing = T),]
+company_type_frequency_chart <- ggplot(ordered_company_type_frequency, aes(x = reorder(primary_issuer_entity_type, -company_type_count), y=company_type_count)) + geom_bar(stat="identity") + theme(axis.text.x = element_text(angle = 45)) + labs(x="Company Type", y="Frequency of Company Type", title = "Frequeny of Company Type")
+company_type_frequency_chart
+```
+
+### Number of Repeats of Companies
+
+
+```{r}
+repeats <- nrow(only_US)-length(unique(only_US$entity_name)) # 2353 repeats
+repeats
+```
+
+### Company Frequenccy
+
+```{r}
+company_frequency <- only_US %>%
+  group_by(entity_name) %>%
+  summarize(company_count = n())
+ordered_company_frequency <- company_frequency[order(company_frequency$company_count,decreasing = T),]
+company_frequency_chart <- ggplot(ordered_company_frequency[1:15,], aes(x = reorder(entity_name, -company_count), y=company_count)) + geom_bar(stat="identity") + theme(axis.text.x = element_text(angle = 45)) + labs(x="Company Name", y="Frequency of Companies", title = "Frequeny of Companies")
+company_frequency_chart
+```
+
+
+### State Num
+
+```{r}
+num_state <- only_US %>%
+  group_by(primary_issuer_state_or_country) %>%
+  summarize(num_state = n())
+num_state <- num_state[order(num_state$num_state, decreasing = TRUE), ]
+```
+
+## EDA for City_Econ
+
+```{r}
+city_econ[3:9] <- sapply(city_econ[3:9],as.numeric)
+city_econ <- city_econ[-c(70,71),]
+
+city_econ_copy <- city_econ # make copy for median table
+
+city_econ_copy$median_citypros5 <- median(city_econ$`City Prosperity Index (CPI) with 5 Dimensions`)
+city_econ_copy$median_citypros4 <- median(city_econ$`City Prosperity Index (CPI) with 4 Dimensions`)
+city_econ_copy$median_prod <- median(city_econ$`Productivity Index`)
+city_econ_copy$median_quallife <- median(city_econ$`Quality of life Index`)
+city_econ_copy$median_inf<- median(city_econ$`Infrastructure Index`)
+city_econ_copy$median_env <- median(city_econ$`Enivronment Index`)
+city_econ_copy$median_equity <- median(city_econ$`Equity Index`)
+
+city_econ_copy$`City Prosperity Index (CPI) with 5 Dimensions` <- ifelse(city_econ_copy$`City Prosperity Index (CPI) with 5 Dimensions`>median_citypros5,1,0)
+city_econ_copy$`City Prosperity Index (CPI) with 4 Dimensions` <- ifelse(city_econ_copy$`City Prosperity Index (CPI) with 4 Dimensions`>median_citypros4,1,0)
+city_econ_copy$`Productivity Index` <- ifelse(city_econ$`Productivity Index`>median_prod,1,0)
+city_econ_copy$`Quality of life Index` <- ifelse(city_econ$`Productivity Index`>median_quallife,1,0)
+city_econ_copy$`Infrastructure Index` <- ifelse(city_econ$`Productivity Index`>median_inf,1,0)
+city_econ_copy$`Enivronment Index` <- ifelse(city_econ$`Productivity Index`>median_env,1,0)
+city_econ_copy$`Equity Index` <- ifelse(city_econ$`Productivity Index`>median_equity,1,0)
+
+city_econ_copy <- city_econ_copy[,-c(10:16)]
+
+city_econ_copy$sum <- rowSums(city_econ_copy[ ,c("City Prosperity Index (CPI) with 5 Dimensions",
+                            "City Prosperity Index (CPI) with 4 Dimensions",
+                            "Productivity Index",
+                            "Quality of life Index",
+                            "Infrastructure Index",
+                            "Enivronment Index",
+                            "Equity Index")])  
+city_econ_copy <- city_econ_copy[order(city_econ_copy$sum,decreasing = T),]
+
+city_econ_copy_top15 <- city_econ_copy[1:15,]
+```
+
+### Top 15 Cities with Most Above Average Medians
+
+```{r}
+top15 <- ggplot(city_econ_copy_top15, aes(x = reorder(City, -sum), y=sum)) + geom_bar(stat="identity") + theme(axis.text.x = element_text(angle = 45)) + labs(x="City", y="Number of Medians Above Average", title = "Number of Above Average Medians by City")
+top15
+```
+
+### lindseys city econ analysis
+
+```{r}
+city_econ <- city_econ[-c(70, 71), ]
+
+median_indices <- c()
+
+city_econ$`City Prosperity Index (CPI) with 5 Dimensions` <- as.numeric(city_econ$`City Prosperity Index (CPI) with 5 Dimensions`)
+city_econ$`City Prosperity Index (CPI) with 4 Dimensions` <- as.numeric(city_econ$`City Prosperity Index (CPI) with 4 Dimensions`)
+city_econ$`Productivity Index` <- as.numeric(city_econ$`Productivity Index`)
+city_econ$`Quality of life Index` <- as.numeric(city_econ$`Quality of life Index`)
+city_econ$`Infrastructure Index` <- as.numeric(city_econ$`Infrastructure Index`)
+city_econ$`Enivronment Index` <- as.numeric(city_econ$`Enivronment Index`)
+city_econ$`Equity Index` <- as.numeric(city_econ$`Equity Index`)
+
+
+median_data <- city_econ %>%
+  group_by(Country) %>%
+  rowwise() %>%
+  mutate(median_index = median(c(`City Prosperity Index (CPI) with 5 Dimensions`, 
+                                  `City Prosperity Index (CPI) with 4 Dimensions`, 
+                                  `Productivity Index`, 
+                                  `Quality of life Index`, 
+                                  `Infrastructure Index`,
+                                  `Enivronment Index`,
+                                  `Equity Index`
+                                  )), 
+         average_index = mean(c(`City Prosperity Index (CPI) with 5 Dimensions`, 
+                                `City Prosperity Index (CPI) with 4 Dimensions`, 
+                                `Productivity Index`, 
+                                `Quality of life Index`, 
+                                `Infrastructure Index`,
+                                `Enivronment Index`,
+                                `Equity Index`)))
+china_median <- median(median_data$median_index[10], median_data$median_index[11])
+median_data$median_index[10]
+
+median_data <- median_data[order(median_data$median_index, median_data$average_index, decreasing = TRUE), ]
+```
+
+### stuff
+
+```{r}
+# Need to clean China, India, and South Africa
+
+median2 <- median_data
+
+## China
+china_med_index <- median(median2$median_index[11], median2$median_index[12])
+china_avg_index <- mean(median2$average_index[11], median2$average_index[12])
+
+## India 
+india_med_index <- median(median2$median_index[26], median2$median_index[27])
+india_avg_index <- mean(median2$average_index[26], median2$average_index[27])
+
+
+## South Africa 
+sa_med_index <- median(median2$median_index[55], median2$median_index[56])
+sa_avg_index <- mean(median2$average_index[55], median2$average_index[56])
+
+
+median_copy <- median2[-c(11, 12, 26, 27, 55, 56) ,c(1, ncol(median2), ncol(median2) - 1)]
+View(median_copy)
+
+china_data <- c("China", china_avg_index, china_med_index)
+india_data <- c("India", india_avg_index, india_med_index)
+sa_data <- c("South Africa", sa_avg_index, sa_med_index)
+
+median_final <- rbind(median_copy, china_data, india_data, sa_data)
+
+median_final$average_index <- as.numeric(median_final$average_index)
+median_final$median_index <- as.numeric(median_final$median_index)
+
+ggplot(median_final, aes(x = Country, y = median_index)) + geom_bar(stat = "identity") + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+ggplot(median_final, aes(x = Country, y = average_index)) + geom_bar(stat = "identity") + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+## Table of the top country indices 
+top_index_table <- median_final[order(median_final$average_index, median_final$median_index, decreasing = TRUE), ]
+head(top_index_table)
+
+variance_index <- city_econ %>%
+  group_by(Country) %>%
+  rowwise() %>%
+  mutate(variance_index = sd(c(`City Prosperity Index (CPI) with 5 Dimensions`, 
+                                 `City Prosperity Index (CPI) with 4 Dimensions`, 
+                                 `Productivity Index`, 
+                                 `Quality of life Index`, 
+                                 `Infrastructure Index`,
+                                 `Enivronment Index`,
+                                 `Equity Index`)))
+most_variance_final <- variance_index[order(variance_index$variance_index, decreasing = TRUE), c(1, 10)]
+head(most_variance_final)
+
+least_variance_final <- variance_index[order(variance_index$variance_index), c(1, 10)]
+head(least_variance_final)
+
+bwplot(`City Prosperity Index (CPI) with 5 Dimensions` +  
+       `City Prosperity Index (CPI) with 4 Dimensions` + 
+       `Productivity Index` +
+       `Quality of life Index` + 
+       `Infrastructure Index`+
+       `Enivronment Index`+
+       `Equity Index` ~ Country, data = city_econ, 
+       xlab = "Country", 
+       ylab = "Index", scales = list(x = list(rot = 90)))
+
+```
+
+
+## Review of EDA Charts So Far
+
+```{r}
+investors_chart
+state_frequency_chart
+city_frequency_chart
+industry_frequency_chart
+company_type_frequency_chart
+repeats
+company_frequency_chart
+top15
+```
+
+
+### LINDSEY EDA WORK 
+
+## Seting stuff up
+```{r}
+library(dplyr)
+library(tidyverse)
+library(readxl)
+library(sqldf)
+library(ggplot2)
+
+metrics <- read.csv("Startup Metrics by City", header = TRUE)
+company_info <- read.csv("company_info.csv")
+View(company_info)
+
+
+city_econ <- read_xlsx("city_info.xlsx")
+colnames(city_econ) <- city_econ[1,]
+city_econ <- city_econ[-1,]
+View(city_econ)
+
+
+colnames(city_econ)[1] <- "Country"
+colnames(city_econ)[2] <- "City"
+
+only_US <- sqldf("SELECT * 
+                 FROM company_info
+                 WHERE primary_issuer_state_or_country IN ('AL','AK','AS','AZ','AR','CA','CO','CT','DE','DC','FM','FL','GA',
+                                                          'GU','HI','ID','IL','IN','IA','KS','KY','LA','ME','MH','MD','MA',
+                                                          'MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND',
+                                                          'MP','OH','OK','OR','PW','PA','PR','RI','SC','SD','TN','TX','UT',
+                                                          'VT','VI','VA','WA','WV','WI','WY')")
+
+```
+
+## Setting up median data and cleaning
+```{r}
+city_econ <- city_econ[-c(70, 71), ]
+
+num_state <- only_US %>%
+  group_by(primary_issuer_state_or_country) %>%
+  summarize(num_state = n())
+num_state <- num_state[order(num_state$num_state, decreasing = TRUE), ]
+
+
+city_econ$`City Prosperity Index (CPI) with 5 Dimensions` <- as.numeric(city_econ$`City Prosperity Index (CPI) with 5 Dimensions`)
+city_econ$`City Prosperity Index (CPI) with 4 Dimensions` <- as.numeric(city_econ$`City Prosperity Index (CPI) with 4 Dimensions`)
+city_econ$`Productivity Index` <- as.numeric(city_econ$`Productivity Index`)
+city_econ$`Quality of life Index` <- as.numeric(city_econ$`Quality of life Index`)
+city_econ$`Infrastructure Index` <- as.numeric(city_econ$`Infrastructure Index`)
+city_econ$`Enivronment Index` <- as.numeric(city_econ$`Enivronment Index`)
+city_econ$`Equity Index` <- as.numeric(city_econ$`Equity Index`)
+
+
+median_data <- city_econ %>%
+  group_by(Country) %>%
+  rowwise() %>%
+  mutate(median_index = median(c(`City Prosperity Index (CPI) with 5 Dimensions`, 
+                                  `City Prosperity Index (CPI) with 4 Dimensions`, 
+                                  `Productivity Index`, 
+                                  `Quality of life Index`, 
+                                  `Infrastructure Index`,
+                                  `Enivronment Index`,
+                                  `Equity Index`
+                                  )), 
+         average_index = mean(c(`City Prosperity Index (CPI) with 5 Dimensions`, 
+                                `City Prosperity Index (CPI) with 4 Dimensions`, 
+                                `Productivity Index`, 
+                                `Quality of life Index`, 
+                                `Infrastructure Index`,
+                                `Enivronment Index`,
+                                `Equity Index`)))
+china_median <- median(median_data$median_index[10], median_data$median_index[11])
+median_data$median_index[10]
+
+median_data <- median_data[order(median_data$median_index, median_data$average_index, decreasing = TRUE), ]
+View(median_data)
+
+
+# Need to clean China, India, and South Africa
+
+median2 <- median_data
+
+## China
+china_med_index <- median(median2$median_index[11], median2$median_index[12])
+china_avg_index <- mean(median2$average_index[11], median2$average_index[12])
+
+## India 
+india_med_index <- median(median2$median_index[26], median2$median_index[27])
+india_avg_index <- mean(median2$average_index[26], median2$average_index[27])
+
+
+## South Africa 
+sa_med_index <- median(median2$median_index[55], median2$median_index[56])
+sa_avg_index <- mean(median2$average_index[55], median2$average_index[56])
+
+
+median_copy <- median2[-c(11, 12, 26, 27, 55, 56) ,c(1, ncol(median2), ncol(median2) - 1)]
+View(median_copy)
+
+china_data <- c("China", china_avg_index, china_med_index)
+india_data <- c("India", india_avg_index, india_med_index)
+sa_data <- c("South Africa", sa_avg_index, sa_med_index)
+
+median_final <- rbind(median_copy, china_data, india_data, sa_data)
+View(median_final)
+median_final$average_index <- as.numeric(median_final$average_index)
+median_final$median_index <- as.numeric(median_final$median_index)
+```
+
+## Creating plots on median / average index data
+```{r}
+ggplot(median_final, aes(x = Country, y = median_index)) + geom_bar(stat = "identity") + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+ggplot(median_final, aes(x = Country, y = average_index)) + geom_bar(stat = "identity") + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+```
+
+## Table / Summary of index information 
+```{r}
+top_index_table <- median_final[order(median_final$average_index, median_final$median_index, decreasing = TRUE), ]
+head(top_index_table)
+
+variance_index <- city_econ %>%
+  group_by(Country) %>%
+  rowwise() %>%
+  mutate(variance_index = sd(c(`City Prosperity Index (CPI) with 5 Dimensions`, 
+                                 `City Prosperity Index (CPI) with 4 Dimensions`, 
+                                 `Productivity Index`, 
+                                 `Quality of life Index`, 
+                                 `Infrastructure Index`,
+                                 `Enivronment Index`,
+                                 `Equity Index`)))
+most_variance_final <- variance_index[order(variance_index$variance_index, decreasing = TRUE), c(1, 10)]
+head(most_variance_final)
+
+least_variance_final <- variance_index[order(variance_index$variance_index), c(1, 10)]
+head(least_variance_final)
+```
+
+## Box and whisker plot of variance
+```{r}
+library(lattice)
+bwplot(`City Prosperity Index (CPI) with 5 Dimensions` +  
+       `City Prosperity Index (CPI) with 4 Dimensions` + 
+       `Productivity Index` +
+       `Quality of life Index` + 
+       `Infrastructure Index`+
+       `Enivronment Index`+
+       `Equity Index` ~ Country, data = city_econ, 
+       xlab = "Country", 
+       ylab = "Index", scales = list(x = list(rot = 90)))
+```
+
