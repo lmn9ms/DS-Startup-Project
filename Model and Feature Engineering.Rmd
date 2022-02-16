@@ -158,13 +158,19 @@ startup_3d
 ### Building K-Means Model
 ```{r}
 View(startup2)
-startup_factor <- startup2 %>% mutate(salary_factor = case_when(
-                    `SALARY.M.` <= -0.7191 ~ 'lower',
-                    -0.7191 <`SALARY.M.`& `SALARY.M.`<= -0.3585 ~ 'lower-mid',
-                    -0.3585<`SALARY.M.`& `SALARY.M.`<=0.387 ~ 'upper-mid',
-                    0.387< `SALARY.M.` ~ 'upper'))
-salary_factor <- as.factor(nba_normal$salary_factor)
+twenty_five <- quantile(startup2$total_amount_sold, 0.25)
+median_q <- median(add_index$Average_Amount_Sold)
+seventy_five <- quantile(add_index$Average_Amount_Sold)
 
-summary(startup2)
+startup_factor <- add_index %>% mutate(sold_factor = case_when(
+                    Average_Amount_Sold <= quantile(startup2$total_amount_sold, 0.25) ~ 'lower',
+                    quantile(startup2$total_amount_sold, 0.25) < Average_Amount_Sold & 
+                      Average_Amount_Sold >= median(startup2$total_amount_sold) ~ 'lower-mid',
+                    median(startup2$total_amount_sold) < Average_Amount_Sold & 
+                      Average_Amount_Sold <= quantile(startup2$total_amount_sold) ~ 'upper-mid',
+                    quantile(startup2$total_amount_sold) < Average_Amount_Sold ~ 'upper'))
+startup_factor$sold_factor <- as.factor(startup_factor$sold_factor)
+
+ggplot(startup_factor, aes(x = average_index, y = median_index, color = sold_factor)) + geom_point()
 ```
 
