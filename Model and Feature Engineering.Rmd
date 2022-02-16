@@ -1,0 +1,170 @@
+---
+title: "Model and Feature Engineering"
+author: "Erica Barton, Chloe Dearman, and Lindsey Norberg"
+date: "2/15/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## Set-Up
+```{r}
+library(dplyr)
+library(tidyverse)
+library(readxl)
+library(sqldf)
+library(ggplot2)
+
+metrics <- read.csv("Startup Metrics by City", header = TRUE)
+company_info <- read.csv("company_info.csv")
+View(company_info)
+
+
+city_econ <- read_xlsx("city_info.xlsx")
+colnames(city_econ) <- city_econ[1,]
+city_econ <- city_econ[-1,]
+View(city_econ)
+
+
+colnames(city_econ)[1] <- "Country"
+colnames(city_econ)[2] <- "City"
+
+only_US <- sqldf("SELECT * 
+                 FROM company_info
+                 WHERE primary_issuer_state_or_country IN ('AL','AK','AS','AZ','AR','CA','CO','CT','DE','DC','FM','FL','GA',
+                                                          'GU','HI','ID','IL','IN','IA','KS','KY','LA','ME','MH','MD','MA',
+                                                          'MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND',
+                                                          'MP','OH','OK','OR','PW','PA','PR','RI','SC','SD','TN','TX','UT',
+                                                          'VT','VI','VA','WA','WV','WI','WY')")
+
+city_econ$`City Prosperity Index (CPI) with 5 Dimensions` <- as.numeric(city_econ$`City Prosperity Index (CPI) with 5 Dimensions`)
+city_econ$`City Prosperity Index (CPI) with 4 Dimensions` <- as.numeric(city_econ$`City Prosperity Index (CPI) with 4 Dimensions`)
+city_econ$`Productivity Index` <- as.numeric(city_econ$`Productivity Index`)
+city_econ$`Quality of life Index` <- as.numeric(city_econ$`Quality of life Index`)
+city_econ$`Infrastructure Index` <- as.numeric(city_econ$`Infrastructure Index`)
+city_econ$`Enivronment Index` <- as.numeric(city_econ$`Enivronment Index`)
+city_econ$`Equity Index` <- as.numeric(city_econ$`Equity Index`)
+
+
+median_data <- city_econ %>%
+  group_by(Country) %>%
+  rowwise() %>%
+  mutate(median_index = median(c(`City Prosperity Index (CPI) with 5 Dimensions`, 
+                                  `City Prosperity Index (CPI) with 4 Dimensions`, 
+                                  `Productivity Index`, 
+                                  `Quality of life Index`, 
+                                  `Infrastructure Index`,
+                                  `Enivronment Index`,
+                                  `Equity Index`
+                                  )), 
+         average_index = mean(c(`City Prosperity Index (CPI) with 5 Dimensions`, 
+                                `City Prosperity Index (CPI) with 4 Dimensions`, 
+                                `Productivity Index`, 
+                                `Quality of life Index`, 
+                                `Infrastructure Index`,
+                                `Enivronment Index`,
+                                `Equity Index`)))
+china_median <- median(median_data$median_index[10], median_data$median_index[11])
+median_data$median_index[10]
+
+median_data <- median_data[order(median_data$median_index, median_data$average_index, decreasing = TRUE), ]
+View(median_data)
+
+
+# Need to clean China, India, and South Africa
+
+median2 <- median_data
+
+## China
+china_med_index <- median(median2$median_index[11], median2$median_index[12])
+china_avg_index <- mean(median2$average_index[11], median2$average_index[12])
+
+## India 
+india_med_index <- median(median2$median_index[26], median2$median_index[27])
+india_avg_index <- mean(median2$average_index[26], median2$average_index[27])
+
+
+## South Africa 
+sa_med_index <- median(median2$median_index[55], median2$median_index[56])
+sa_avg_index <- mean(median2$average_index[55], median2$average_index[56])
+
+median_copy <- median2[-c(11, 12, 26, 27, 55, 56) ,c(1, ncol(median2), ncol(median2) - 1)]
+View(median_copy)
+
+china_data <- c("China", china_avg_index, china_med_index)
+india_data <- c("India", india_avg_index, india_med_index)
+sa_data <- c("South Africa", sa_avg_index, sa_med_index)
+
+median_final <- rbind(median_copy, china_data, india_data, sa_data)
+
+```
+
+
+## Merging the Data for Modeling
+```{r}
+city_econ$Country<-tolower(city_econ$Country)
+
+company_info$primary_issuer_state_or_country_description<-tolower(company_info$primary_issuer_state_or_country_description)
+
+if (company_info$primary_issuer_state_or_country %in% unique(only_US$primary_issuer_state_or_country)==TRUE){
+  company_info$primary_issuer_state_or_country_description== "united states"
+  }
+
+company_info$primary_issuer_state_or_country_description[company_info$primary_issuer_state_or_country 
+                                                         %in% unique(only_US$primary_issuer_state_or_country)==T] <- "united states"
+
+company_info$Country<-company_info$primary_issuer_state_or_country_description
+
+merged<-merge(city_econ, company_info, by='Country')
+unique(merged$Country)
+merged %>% 
+  group_by(Country) %>% 
+  summarise("Number of Startups" = n())
+```
+
+## Predict Total Amount Sold 
+```{r}
+startup <- merged
+startup2 <- startup[which(startup$total_amount_sold != 0), -c(10:11,15:16,21:22,24,27,28:33,37,41,46,49:54,58)]
+colnames(startup2) <- gsub(" ", "_", colnames(startup2))
+```
+
+
+## K-Means Clustering Model 
+
+### 3D Graphic EDA
+```{r}
+library(caret)
+library(NbClust)
+library(plotly)
+average_sold <- startup2 %>%
+  group_by(Country) %>%
+  summarize("Average_Amount_Sold" = mean(total_amount_sold))
+
+median_copy$Country <- tolower(median_copy$Country)
+add_index <- merge(average_sold, median_copy, by = "Country")
+
+add_index$average_index <- as.numeric(add_index$average_index)
+add_index$median_index <- as.numeric(add_index$median_index)
+
+startup_3d <- plot_ly(add_index, x = ~Average_Amount_Sold, y = ~average_index, z = ~median_index)
+
+startup_3d
+```
+
+### Building K-Means Model
+```{r}
+View(startup2)
+startup_factor <- startup2 %>% mutate(salary_factor = case_when(
+                    `SALARY.M.` <= -0.7191 ~ 'lower',
+                    -0.7191 <`SALARY.M.`& `SALARY.M.`<= -0.3585 ~ 'lower-mid',
+                    -0.3585<`SALARY.M.`& `SALARY.M.`<=0.387 ~ 'upper-mid',
+                    0.387< `SALARY.M.` ~ 'upper'))
+salary_factor <- as.factor(nba_normal$salary_factor)
+
+summary(startup2)
+```
+
