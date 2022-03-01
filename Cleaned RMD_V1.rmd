@@ -1,0 +1,378 @@
+---
+title: "Model and Feature Engineering"
+author: "Erica Barton, Chloe Dearman, and Lindsey Norberg"
+date: "2/15/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Intro 
+
+
+## Set-Up
+
+```{r}
+#install.packages("dvmisc")
+library(dplyr)
+library(tidyverse)
+library(readxl)
+library(sqldf)
+library(ggplot2)
+library(dvmisc)
+
+
+#metrics <- read.csv("Startup Metrics by City", header = TRUE)
+company_info <- read.csv("7ba47fc0-0006-45d7-a975-4cefcc68f070_SECFormDFiling-2018.csv")
+#View(company_info)
+
+
+only_US <- sqldf("SELECT * 
+                 FROM company_info
+                 WHERE primary_issuer_state_or_country IN ('AL','AK','AS','AZ','AR','CA','CO','CT','DE','DC','FM','FL','GA',
+                                                          'GU','HI','ID','IL','IN','IA','KS','KY','LA','ME','MH','MD','MA',
+                                                          'MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND',
+                                                          'MP','OH','OK','OR','PW','PA','PR','RI','SC','SD','TN','TX','UT',
+                                                          'VT','VI','VA','WA','WV','WI','WY')")
+
+only_US$State <- str_to_title(only_US$primary_issuer_state_or_country_description)
+only_US$State_Abbr <- (only_US$primary_issuer_state_or_country)
+
+## Most Updated 
+only_US_updated <- only_US[,c(4,8,14,16,29,30,33,52,53)]
+only_US_updated$primary_issuer_city <- str_to_title(only_US_updated$primary_issuer_city)
+```
+
+
+## Cleaning Money Columns
+
+```{r}
+# Get rid of 0 in total amount sold
+only_US_updated<-only_US_updated[which(only_US_updated$total_amount_sold!=0),]
+# Get rid of NA in total offering amount
+only_US_updated <- only_US_updated[!is.na(only_US_updated$total_offering_amount),]
+```
+
+# EDA
+
+## Investors
+
+```{r}
+investors <- only_US_updated %>%
+  group_by(State_Abbr) %>%
+  summarize(mean_num_investors = mean(total_investors))
+ordered_investors <- investors[order(investors$mean_num_investors,decreasing = T),]
+investors_chart <- ggplot(ordered_investors[1:15,], aes(x = reorder(State_Abbr, -mean_num_investors), y=mean_num_investors)) + geom_bar(stat="identity") + theme(axis.text.x = element_text(angle = 45)) + labs(x="State/Country", y="Mean Number of Investors", title = "Top 15 Number of Investors per State")
+investors_chart
+
+investors_chart2 <- ggplot(ordered_investors[40:53,], aes(x = reorder(State_Abbr, -mean_num_investors), y=mean_num_investors)) + geom_bar(stat="identity") + theme(axis.text.x = element_text(angle = 45)) + labs(x="State/Country", y="Mean Number of Investors", title = "Bottom 15 Number of Investors per State")
+investors_chart2
+```
+
+## State Frequency
+
+```{r}
+state_frequency <- only_US_updated %>%
+  group_by(State_Abbr) %>%
+  summarize(state_count = n())
+ordered_state_frequency <- state_frequency[order(state_frequency$state_count,decreasing = T),]
+state_frequency_chart <- ggplot(ordered_state_frequency[1:15,], aes(x = reorder(State_Abbr, -state_count), y=state_count)) + geom_bar(stat="identity") + theme(axis.text.x = element_text(angle = 45)) + labs(x="State", y="Frequency of State", title = "Frequency of States")
+state_frequency_chart
+```
+
+## City Frequency
+
+```{r}
+city_frequency <- only_US_updated %>%
+  group_by(primary_issuer_city) %>%
+  summarize(city_count = n())
+ordered_city_frequency <- city_frequency[order(city_frequency$city_count,decreasing = T),]
+city_frequency_chart <- ggplot(ordered_city_frequency[1:15,], aes(x = reorder(primary_issuer_city, -city_count), y=city_count)) + geom_bar(stat="identity") + theme(axis.text.x = element_text(angle = 45,color="red")) + labs(x="City", y="Frequency of City", title = "Frequency of City")
+city_frequency_chart
+```
+
+### Industry Frequency
+
+```{r}
+industry_frequency <- only_US_updated %>%
+  group_by(industry_group_type) %>%
+  summarize(industry_count = n())
+ordered_industry_frequency <- industry_frequency[order(industry_frequency$industry_count,decreasing = T),]
+
+industry_frequency_chart <- ggplot(ordered_industry_frequency[1:15,], aes(x = reorder(industry_group_type, -industry_count), y=industry_count)) + geom_bar(stat="identity") + theme(axis.text.x = element_text(angle = 45, color="red")) + labs(x="Industry", y="Frequency of Industry", title = "Frequency of Industry") 
+industry_frequency_chart
+```
+
+### Company Type Frequency
+
+```{r}
+company_type_frequency <- only_US_updated %>%
+  group_by(primary_issuer_entity_type) %>%
+  summarize(company_type_count = n())
+ordered_company_type_frequency <- company_type_frequency[order(company_type_frequency$company_type_count,decreasing = T),]
+company_type_frequency_chart <- ggplot(ordered_company_type_frequency, aes(x = reorder(primary_issuer_entity_type, -company_type_count), y=company_type_count)) + geom_bar(stat="identity") + theme(axis.text.x = element_text(angle = 45, color="red")) + labs(x="Company Type", y="Frequency of Company Type", title = "Frequeny of Company Type")
+company_type_frequency_chart
+```
+
+## State Num (table)
+
+```{r}
+num_state <- only_US_updated %>%
+  group_by(State_Abbr) %>%
+  summarize(num_state = n())
+num_state <- num_state[order(num_state$num_state, decreasing = TRUE), ]
+num_state
+```
+
+## Total Amount Sold EDA
+
+```{r}
+tas_bycity <- only_US_updated %>%
+  group_by(primary_issuer_city) %>%
+  summarize(AVG_TAS = mean(total_amount_sold))
+ordered_tas_bycity <- tas_bycity[order(tas_bycity$AVG_TAS,decreasing = T),]
+ordered_tas_bycity_chart <- ggplot(ordered_tas_bycity[1:15,], aes(x = reorder(primary_issuer_city, -AVG_TAS), y=AVG_TAS)) + geom_bar(stat="identity") + theme(axis.text.x = element_text(angle = 45)) + labs(x="City", y="Average Total Amount Sold", title = "Average Total Amount Sold by City")
+ordered_tas_bycity_chart
+
+
+tas_bystate <- only_US_updated %>%
+  group_by(State_Abbr) %>%
+  summarize(AVG_TAS = mean(total_amount_sold))
+ordered_tas_bystate <- tas_bystate[order(tas_bystate$AVG_TAS,decreasing = T),]
+ordered_tas_bystate_chart <- ggplot(ordered_tas_bystate[1:15,], aes(x = reorder(State_Abbr, -AVG_TAS), y=AVG_TAS)) + geom_bar(stat="identity") + theme(axis.text.x = element_text(angle = 45)) + labs(x="State", y="Average Total Amount Sold", title = "Average Total Amount Sold by State")
+ordered_tas_bystate_chart
+
+```
+
+
+# Modeling
+
+## MLR
+
+```{r}
+model <- lm(total_amount_sold~industry_group_type + total_investors + total_offering_amount, data = only_US_updated)
+
+
+summary(model)
+
+lapply(only_US_updated, class)
+
+lapply(lapply(only_US_updated, unique), length)
+lapply(only_US_updated, class)
+
+model_f <- lm(log10(total_amount_sold)~factor(industry_group_type) + total_investors + log10(total_offering_amount), data = only_US_updated)
+
+summary(model_f)
+
+hist(log10(only_US_updated$total_amount_sold), nclass = 100)
+
+only_US_updated$new_y <- only_US_updated$total_amount_sold/only_US_updated$total_offering_amount > 0.95
+
+mean(only_US_updated$total_amount_sold/only_US_updated$total_offering_amount > 0.95)
+mean(only_US_updated$total_amount_sold/only_US_updated$total_offering_amount > 0.90)
+mean(only_US_updated$total_amount_sold/only_US_updated$total_offering_amount > 0.99)
+mean(only_US_updated$total_amount_sold/only_US_updated$total_offering_amount > 0.95)
+hist(only_US_updated$total_amount_sold/only_US_updated$total_offering_amount, nclass = 100)
+
+plot(log10(only_US_updated$total_offering_amount),log10(only_US_updated$total_amount_sold))
+
+glm(new_y ~
+      factor(industry_group_type) + total_investors + log10(total_offering_amount),
+      data = only_US_updated,
+      family=binomial(link='logit'))
+
+
+glm(new_y ~
+      total_investors + log10(total_offering_amount),
+      data = only_US_updated[only_US_updated$total_offering_amount >= 1000, ],
+      family=binomial(link='logit'))
+
+# new variable of buckets of total_offering_amount
+only_US_updated_over_tenthousand<-only_US_updated[!(only_US_updated$total_offering_amount <= 10000),]
+
+only_US_updated_over_tenthousand$groups <-quant_groups(only_US_updated_over_tenthousand$total_offering_amount, 4) #https://rdrr.io/rforge/dvmisc/man/quant_groups.html
+
+levels(only_US_updated_over_tenthousand$groups) <- c("Small", "Medium","Large","Extremely Large")
+
+only_US_updated_over_tenthousand$new_y_binary <- ifelse(only_US_updated_over_tenthousand$new_y==TRUE,1,0) 
+test <- only_US_updated[!(only_US_updated$total_offering_amount <= 10000)&(only_US_updated$total_offering_amount >= 100000000) ,]
+
+test$groups <-quant_groups(test$total_offering_amount, 4)
+levels(test$groups) <- c("Small", "Medium","Large","Extremely Large")
+
+
+only_US_updated_over_tenthousand$new_y_binary <- ifelse(only_US_updated_over_tenthousand$new_y==TRUE,1,0) 
+glm(new_y ~
+      total_investors + groups,
+      data = test,
+      family=binomial(link='logit'))
+
+```
+
+## Random Forest
+
+```{r,message=F}
+#install.packages("party")
+library(party)
+library(randomForest)
+
+# Create the forest: Diagnostic with all variables. very bad, will force you to terminate R. 
+
+# output.forest <- randomForest(total_amount_sold ~., data = only_US_updated)
+
+# print(output.forest) 
+# 
+# print(importance(output.forest,type = 2)) 
+
+
+
+#output.forest2 <- randomForest(new_y ~
+      total_investors + groups,
+      data = test)
+
+# View the forest results.
+#print(output.forest2) 
+
+# Importance of each predictor.
+print(importance(output.forest2,type = 2)) 
+
+## Swapping State with City: bad
+
+# output.forest3 <- randomForest(total_amount_sold ~ total_offering_amount + primary_issuer_city, data = only_US_updated)
+# 
+# # View the forest results.
+# print(output.forest3) 
+# 
+# # Importance of each predictor.
+# print(importance(output.forest3,type = 2)) 
+
+```
+
+## Correlation Matrix of Only_US_Updated (some columns)
+
+```{r}
+cor(only_US_updated[,c(5:7)])
+```
+
+## K-Means Clustering Model 
+
+### 3D Graphic EDA
+```{r,message=FALSE}
+library(caret)
+library(NbClust)
+library(plotly)
+average_sold <- only_US_updated %>%
+  group_by(State_Abbr) %>%
+  summarize("Average_Amount_Sold" = mean(total_amount_sold))
+# 
+# median_copy$Country <- tolower(median_copy$Country)
+# add_index <- merge(average_sold, median_copy, by = "Country")
+# 
+# add_index$average_index <- as.numeric(add_index$average_index)
+# add_index$median_index <- as.numeric(add_index$median_index)
+# 
+# startup_3d <- plot_ly(add_index, x = ~Average_Amount_Sold, y = ~average_index, z = ~median_index)
+# 
+# startup_3d
+```
+
+### Building K-Means Model
+
+```{r}
+# startup2 <- only_US_updated
+# 
+# quantile(startup2$total_amount_sold, 0.75)
+# median(startup2$total_amount_sold)
+# startup_factor <- add_index %>% 
+#   mutate(sold_factor = case_when(
+#                     Average_Amount_Sold <= 323000 ~ 'lower',
+#                     323000 < Average_Amount_Sold & 
+#                       Average_Amount_Sold <= 1600000 ~ 'lower-mid',
+#                     1600000 < Average_Amount_Sold & 
+#                       Average_Amount_Sold <= 7500000 ~ 'upper-mid',
+#                     7500000 < Average_Amount_Sold ~ 'upper'))
+# startup_factor$sold_factor <- as.factor(startup_factor$sold_factor)
+# View(startup_factor)
+# 
+# ggplot(startup_factor, aes(x = average_index, y = median_index, color = sold_factor)) + geom_point()
+```
+
+```{r}
+# summary(merged)
+# library(quantable)
+# correct_var <- merged[ ,c(3:9, 39, 42)]
+# 
+# correct_sold <- correct_var %>%
+#   filter(total_amount_sold > 0)
+# 
+# ncol(correct_sold)
+# sold_invest <- correct_sold[ ,c(8,9)]
+# scale_sold <- robustscale(sold_invest)
+# comb <- cbind(correct_sold[, -c(8,9)], scale_sold$data)
+# View(comb)
+# 
+# ## standardize the amount sold and re-run kmeans
+# kmeans_startup <- kmeans(comb, centers = 3, 
+#                         algorithm = "Lloyd", iter.max = 30)
+# 
+# # look at misscaled feature
+# table(kmeans_startup$cluster)
+# 
+# startup_qual <- kmeans_startup$betweenss / kmeans_startup$totss
+# startup_qual
+# 
+# boxplot(correct_var$total_amount_sold)
+# robust scalar 
+```
+
+```{r}
+View(company_info)
+glm_mod <- glm(scale(total_amount_sold) ~ scale(total_investors) + industry_group_type + 
+      primary_issuer_entity_type + has_nonaccreddited_investors + duration_of_offering_more_than_one_year + debt_type_security_Offered, 
+    data = company_info)
+
+summary(glm_mod)
+```
+
+```{r}
+# library(party)
+# library(randomForest)
+# 
+# # Create the forest.
+# company_info2 <- company_info
+# company_info2$total_investors <- robustscale(company_info2$total_investors)$data
+# 
+# robustscale(company_info2$total_amount_sold)
+# 
+# View(company_info)
+# output.forest <- randomForest(scale(total_amount_sold) ~ total_investors + industry_group_type + 
+#     primary_issuer_entity_type + has_nonaccreddited_investors + 
+#     duration_of_offering_more_than_one_year, 
+#     data = company_info)
+# 
+# sum(is.na(company_info$debt_type_security_Offered))
+# 
+# # View the forest results.
+# print(output.forest) 
+# 
+# #find number of trees that produce lowest test MSE
+# which.min(output.forest$mse)
+# 
+# plot(output.forest)
+# 
+# # Importance of each predictor.
+# varImpPlot(output.forest)
+# print(importance(output.forest,type = 2))
+
+# use cor mat
+# center --> take mean of each feature and subtract from each entry 
+
+```
+
+```{r}
+# library(M3C)
+# tsne(correct_sold, colvec = c("Gold"))
+```
+
